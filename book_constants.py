@@ -7,9 +7,9 @@ Created on Thu Feb 16 20:53:28 2017
 DB = {
     'book': {
         'type': 'sqlite',
-        'connection': {'database': 'D:/Python/fms/book/book.db'},
+        'connection': {'database': 'D:/Python/book/book.db'},
         'tbls': {
-            'file': (['path', 'ctime', 'size', 'isbn', 'md5'], 'path'),
+            'file': (['path', 'ctime', 'size', 'isbn', 'md5','flag'], 'path'),
             'book': (['isbn', 'title', 'isbn_10', 'isbn_13', 'authors',
                       'edition', 'publisher', 'link', 'other_info'], 'isbn'),
             'tag': (['id','name'], 'id'),

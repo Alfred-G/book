@@ -8,7 +8,8 @@ import traceback
 
 
 from fms.local_file import LocalFile
-from utils.db_connector import DBconnector
+from utils.db_connector import DBcon
+from book.book_constants import DB
 
 INFO = {
     'path': r'C:\Users\Alfred\Desktop\1',
@@ -22,7 +23,7 @@ class BookFile(LocalFile):
 
     def __init__(self):
         super(BookFile,self).__init__()
-        self.db = DBconnector(DB['book'])
+        self.db = DBcon(DB['book'])
 
     @staticmethod
     def create_table():
@@ -37,10 +38,14 @@ class BookFile(LocalFile):
         return stmt
         
     def add_isbn(self, path):
-        for i in self.scan(path):
-            if i['path'][-4:] == '.pdf':
-                i['isbn'] = self.convert(self.get_isbn(i['path']))
-                yield i
+        try:
+            for i in self.scan(path):
+                if i['path'][-4:] == '.pdf':
+                    i['isbn'] = self.convert(self.get_isbn(i['path']))
+                    i['flag'] = 1
+                    yield i
+        except:
+            traceback.print_exc()
 
     @staticmethod
     def get_isbn(file_path):
@@ -48,6 +53,7 @@ class BookFile(LocalFile):
         if file_path.split()[-1][:5] == 'isbn_':
             isbn = file_path.split()[-1][5:].split('.')[0].strip('isbn')
             return isbn
+        return ''
         file_object=open(file_path,'rb')
         try:
             reader=PyPDF2.PdfFileReader(file_object)

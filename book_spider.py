@@ -86,6 +86,8 @@ class BookSpider(Spider):
         image_urls = response.xpath('//div[@id="image"]/a/img/@src')
         self.get_imgs('d:/Python/fms/book/pic', image_urls,
                              prefix='isbndb')
+        
+        print(book.keys())
 
         return book
 
@@ -149,3 +151,8 @@ class BookSpider(Spider):
 
         book['other_info'] = str(book['other_info'])
         return book
+    
+    def crawl(self, data, parse='isbndb'):
+        for i in data:
+            yield getattr(self, parse)(i)
+
