@@ -8,6 +8,7 @@ import traceback
 
 
 from fms.local_file import LocalFile
+from utils.functions import get_md5
 from utils.db_connector import DBcon
 from book.book_constants import DB
 
