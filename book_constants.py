@@ -4,10 +4,16 @@ Created on Thu Feb 16 20:53:28 2017
 
 @author: Alfred
 """
+UNCLEAN_PATH = r'C:\Users\Alfred\Desktop\book'
+
+CLEAN_PATH = r'C:\Users\Alfred\Desktop\clean'
+
+REMOVE_PATH = r'C:\Users\Alfred\Desktop\remove'
+
 DB = {
     'book': {
         'type': 'sqlite',
-        'connection': {'database': 'D:/Python/book/book.db'},
+        'connection': {'database': 'C:/Users/Alfred/Documents/Python/My/book/book.db'},#'D:/Python/book/book.db'},
         'tbls': {
             'dirty': (
                 [

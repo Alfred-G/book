@@ -4,6 +4,7 @@ Created on Sat Feb 11 15:04:53 2017
 
 @author: Alfred
 """
+import threading
 import traceback
 
 
@@ -42,20 +43,34 @@ class BookFile(LocalFile):
         try:
             for i in self.scan(path):
                 if i['path'][-4:] == '.pdf':
-                    i['isbn'] = self.convert(self.get_isbn(i['path']))
-                    i['flag'] = 1
-                    yield i
+                    i = FileIO(i)
+                    i.start()
+                    yield i.result
         except:
             traceback.print_exc()
 
+class FileIO(threading.Thread):
+    def __init__(self, result):
+        super(FileIO, self).__init__()
+        self.result = result
+        self.setDaemon(True)
+
+    def run(self):
+        fobj = open(self.result['path'], 'rb')
+        self.result['md5'] = get_md5(fobj.read())
+        if self.result['path'].split()[-1][:5] == 'isbn_':
+            isbn = self.result['path'].split()[-1][5:]\
+                .split('.')[0].strip('isbn')
+        else:
+            isbn = self.get_isbn(fobj)
+        fobj.close()
+        
+        self.result['isbn'] = self.convert(isbn)
+        self.result['flag'] = 1
+
     @staticmethod
-    def get_isbn(file_path):
+    def get_isbn(file_object):
         import PyPDF2
-        if file_path.split()[-1][:5] == 'isbn_':
-            isbn = file_path.split()[-1][5:].split('.')[0].strip('isbn')
-            return isbn
-        return ''
-        file_object=open(file_path,'rb')
         try:
             reader=PyPDF2.PdfFileReader(file_object)
             for i in range(min(10,reader.numPages)):

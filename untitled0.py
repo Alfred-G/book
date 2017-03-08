@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Mar  1 13:25:44 2017
+Created on Wed Mar  8 13:20:00 2017
 
 @author: Alfred
 """
+
 import os
 import math
 import traceback
@@ -13,43 +14,35 @@ from PyQt5.QtWidgets import QGridLayout, QPushButton, QLineEdit,\
 #from PyQt5.QtCore import Qt
 #from PyQt5.QtGui import QCursor
 
-from utils.tag import Tag
 from fms.main_window import MainWindow, ListZone
 from book.book_constants import DB, UNCLEAN_PATH, CLEAN_PATH, REMOVE_PATH
-from book.book_file import BookFile
-from book.book_spider import BookSpider
-from utils.db_connector import DBcon
 
 
 class BookFms(MainWindow):
     """
     fms
     """
-    def __init__(self):
+    def __init__(self, db, opr, spd, tag):
         try:
-            # Gui Parts
-            self.unclean_zone = ListZone('dirty')
-            self.clean_zone = ListZone('file')
-            
             # Functional Parts
-            self.tag = Tag('book')
-            self.db = DBcon(DB['book'])
-            self.book_file = BookFile()
-            self.book_spider = BookSpider()
+            self.db = db
+            self.opr = opr
+            self.spd = spd
+            self.tag = tag
 
             # Initial
             super(BookFms, self).__init__()
             self.set_button_zone()
-            self.set_edit_zone('dirty')
             self.set_tab_zone()
+            self.set_edit_zone()
 
             #self.show()
         except:
             traceback.print_exc()
 
-    def create_table(self):
+    def create_table(self, database):
         try:
-            tbls = DB['book']['tbls']
+            tbls = DB[database]['tbls']
             for i in tbls.keys():
                 flds, pk = tbls[i]
                 stmt = \
@@ -72,10 +65,21 @@ class BookFms(MainWindow):
             delete = QPushButton('Delete')
             self.lineEdit = QLineEdit()
 
-            self.lineEdit.returnPressed.connect(self.search)
+            self.lineEdit.returnPressed.connect(
+                lambda x: self.search(
+                    'SELECT {tbl}.isbn,'\
+                           'book.isbn,'\
+                           'book.isbn,'\
+                        '   book.title,'\
+                        '   {tbl}.path '\
+                      'FROM {tbl} '\
+                 'LEFT JOIN book '\
+                        'ON {tbl}.isbn = book.isbn '
+                )
+            )
             scan.clicked.connect(self.scan)
             crawl.clicked.connect(self.crawl)
-            move.clicked.connect(self.click_move)
+            move.clicked.connect(self.move)
             delete.clicked.connect(self.remove)
             
             grid = QGridLayout()
@@ -88,40 +92,28 @@ class BookFms(MainWindow):
         except:
             traceback.print_exc()
 
-    def search(self):
+    def search(self, stmt):
         try:
             list_zone = self.tab_zone.currentWidget()
-            stmt = \
-                'SELECT {tbl}.path,'\
-                       'book.isbn,'\
-                       'book.isbn,'\
-                    '   book.title,'\
-                    '   {tbl}.path '\
-                  'FROM {tbl} '\
-             'LEFT JOIN book '\
-                    'ON {tbl}.isbn = book.isbn '\
-                .format(tbl=list_zone.name)
+            stmt = stmt.format(tbl=list_zone.name)
             if '#' in self.lineEdit.text():
                 where, tag = self.lineEdit.text().split('#')
                 tags = set()
                 for i in self.tag.interpret(tag):
                     tags.update(set(self.tag.tag_to_item(i)))
                 list_zone.info_list = [
-                    (i[0], i[1], i[0]) if i[1] and i[0] in tags \
-                        else (i[0], os.path.basename(i[2]), i[0]) \
+                    i if i[3] and i[0] in tags \
+                        else (i[0], i[1], i[2], os.path.basename(i[0]), i[0]) \
                         for i in self.db.select(stmt + where)
                 ]
             else:
                 where = self.lineEdit.text()
-                list_zone.info_list = []
-                for i in self.db.select(stmt + where):
-                    if i[3]:
-                        list_zone.info_list.append(i)
-                    elif i[0]:
-                        list_zone.info_list.append(
-                            (i[0], i[1], i[2], os.path.basename(i[0]), i[0])
-                        )
-
+                list_zone.info_list = [
+                    (i[0], i[1], i[0]) if i[1] \
+                        else (i[0], os.path.basename(i[2]), i[0]) \
+                        for i in self.db.select(stmt + where)
+                ]
+                
             max_page = max(
                 math.ceil(len(list_zone.info_list) / 42) - 1, 0
             )
@@ -133,19 +125,19 @@ class BookFms(MainWindow):
             self.statusBar().showMessage(str(len(list_zone.info_list)))
         except:
             traceback.print_exc()
-    
+
     def scan(self):
         path = UNCLEAN_PATH
         try:
             self.statusBar().showMessage('scan start')
             self.db.execute('UPDATE dirty SET flag=0')
-            self.db.sqlite_insert('dirty', self.book_file.add_isbn(path))
+            self.db.sqlite_insert('dirty', self.opr.add_isbn(path))
             self.db.execute('DELETE FROM dirty WHERE flag=0')
             self.statusBar().showMessage('scan complete')
         except:
             traceback.print_exc()
-        
-    def crawl(self):#
+
+    def crawl(self):
         try:
             stmt = 'SELECT dirty.isbn '\
                      'FROM dirty '\
@@ -159,8 +151,8 @@ class BookFms(MainWindow):
             self.statusBar().showMessage('crawl complete')
         except:
             traceback.print_exc()
-        
-    def name_format(self):#
+
+    def name_format(self):
         try:
             stmt = 'SELECT dirty.isbn, book.title FROM dirty JOIN book '\
                 'ON dirty.isbn = book.isbn '\
@@ -179,19 +171,19 @@ class BookFms(MainWindow):
 
     def move(self):
         try:
-            list_zone = self.tab_zone.currentWidget()
+            list_zone = self.tab_widget.currentWidget()
             dialog = QFileDialog()
-            if len(list_zone.selected[0]) > 1:
+            if len(self.selected[0]) > 1:
                 dst = dialog.getExistingDirectory()
                 if not dst:
                     return
-                for i in list_zone[0]:
+                for i in self.selected[0]:
                     src = list_zone.info_list[i][1]
                     dst = os.path.join(dst, os.path.basename(src))
                     self.rename(src, dst)
-            elif list_zone.selected[0]:
-                for i in list_zone.selected[0]:
-                    src = list_zone.info_list[i][0]
+            elif self.selected[0]:
+                for i in self.selected[0]:
+                    src = list_zone.info_list[i][1]
                 dst = dialog.getSaveFileName(
                         directory=src, filter='*.%s' % src.split('.')[-1]
                 )
@@ -203,15 +195,11 @@ class BookFms(MainWindow):
                 return
         except:
             traceback.print_exc()
-    
-    def click_move(self):
-        self.tab_zone.currentWidget().select()
-        self.move()
             
     def rename(self, src, dst):
         try:
             list_zone = self.tab_zone.currentWidget()
-            if self.book_file.rename(src, dst):
+            if self.opr.rename(src, dst):
                 self.db.update(list_zone.name, ['path'],
                                [{'path': dst, '_pk': src}])
         except:
@@ -220,10 +208,10 @@ class BookFms(MainWindow):
     def remove(self):
         try:
             list_zone = self.tab_zone.currentWidget()
-            for i in list_zone[0]:
+            for i in self.selected[0]:
                 src = list_zone.info_list[i][1]
                 dst = os.path.join(REMOVE_PATH, os.path.basename(src))
-                if self.book_file.rename(src, dst):
+                if self.opr.rename(src, dst):
                     self.db.execute(
                         'delete from {tbl} where path="{path}"'\
                         .format(tbl=list_zone.name, path=src)
@@ -234,7 +222,8 @@ class BookFms(MainWindow):
     ####################################################################
     def set_edit_zone(self, name):
         try:
-            for i in self.get_flds(name):
+            list_zone = self.tab_zone.currentWidget()
+            for i in self.get_flds(list_zone.name):
                 self.edit_zone.add_widget(i)
             self.edit_zone.widget_dict['%s.isbn' % name]\
                 .editingFinished.connect(self.file_isbn_modify)
@@ -268,7 +257,7 @@ class BookFms(MainWindow):
             self.statusBar().showMessage('%s.isbn modified' % list_zone.name)
         except:
             traceback.print_exc()
-            
+
     ####################################################################
     def set_tab_zone(self):
         try:
@@ -286,7 +275,7 @@ class BookFms(MainWindow):
             keys = list(self.edit_zone.widget_dict.keys())
             for i in keys.copy():
                 self.edit_zone.remove_widget(i)
-    
+
             self.set_edit_zone(self.tab_zone.currentWidget().name)
         except:
             traceback.print_exc()
@@ -303,35 +292,37 @@ class BookFms(MainWindow):
                 i[1].onDblClicked.connect(self.open_file)
                 i[1].onDblClickedCtrl.connect(self.open_folder)
                 i[1].onDblClickedCtrl.connect(list_zone.select)
-                i[1].onDblClicked[int,str].connect(self.click_move)
+                i[1].onDblClicked[int,int].connect(self.move)
         except:
             traceback.print_exc()
     
     def get_file_path(self, idx, list_zone):
-        try:
-            rst = self.db.execute(
-                'select path from {tbl} where isbn={isbn} limit 1'\
-                .format(tbl=list_zone.name, isbn=list_zone.info_list[idx][1])
-            )
-            for i in rst:
-                return i[0]
-        except:
-            traceback.print_exc()
+        rst = self.db.execute(
+            'select path from {tbl} where isbn={isbn} limit 1'\
+            .format(list_zone.name, list_zone[idx][1])
+        )
+        for i in rst:
+            return i[0]
         
     def open_file(self):
         try:
             list_zone = self.sender().parent()
             idx = list_zone.basic_select(True)
-            self.book_file.open_file(list_zone.info_list[idx][0])
+            for i in list_zone.selected[0]:
+                path = self.get_file_path(idx, list_zone)
+                self.opr.open_file(path)
+                break
         except:
             traceback.print_exc()
 
     def open_folder(self):
         try:
             list_zone = self.sender().parent()
-            idx = list_zone.basic_select(True)
-            path = list_zone.info_list[idx][0]
-            self.book_file.open_file(os.path.dirname(path))
+            idx = self.basic_select()
+            for i in list_zone.selected[0]:
+                path = self.get_file_path(idx, list_zone)
+                self.opr.open_file(os.path.dirname(path))
+                break
         except:
             traceback.print_exc()
             
@@ -339,10 +330,10 @@ class BookFms(MainWindow):
         list_zone = self.sender().parent()
         try:
             flds = self.get_flds(list_zone.name)
-            values = self.db.select(
+            values = self.db.execute(
                 'select {flds} from {tbl} left join book '\
-                'on {tbl}.isbn = book.isbn '\
-                'where {tbl}.path = "{path}" limit 1' \
+                'on file.isbn = book.isbn '\
+                'where file.path = "{path}" limit 1' \
                 .format(flds=','.join(flds),
                         tbl=list_zone.name,
                         path=list_zone.info_list[idx][1])
@@ -353,11 +344,9 @@ class BookFms(MainWindow):
                     edit = self.edit_zone.widget_dict[flds[i2[0]]]
                     edit.setText(str(i2[1]))
                     edit.setCursorPosition(0)
-            if list_zone.info_list[idx][1]:
-                stmt = self.tag.item_to_tag(list_zone.info_list[idx][1])
-                tags = [i[0] for i in self.db.select(stmt)]
-                self.edit_zone.widget_dict['tag'].setText(';'.join(tags))
-                self.edit_zone.widget_dict['tag'].setCursorPosition(0)
+            tags = self.tag.item_to_tag(list_zone.info_list[idx][0])
+            self.edit_zone.widget_dict['tag'].setText(';'.join(tags))
+            self.edit_zone.widget_dict['tag'].setCursorPosition(0)
         except:
             traceback.print_exc()
 
